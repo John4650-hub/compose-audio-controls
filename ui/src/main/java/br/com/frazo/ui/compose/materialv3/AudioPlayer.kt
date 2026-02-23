@@ -51,6 +51,7 @@ fun AudioPlayer(
                 when (audioPlayingData.status) {
                     AudioPlayerStatus.NOT_INITIALIZED, AudioPlayerStatus.PAUSED -> audioPlayerCallbacks.onPlay()
                     AudioPlayerStatus.PLAYING -> audioPlayerCallbacks.onPause()
+                    AudioPlayerStatus.HAVE_TO_RECORD -> null
                 }
             }) {
             when (audioPlayingData.status) {
