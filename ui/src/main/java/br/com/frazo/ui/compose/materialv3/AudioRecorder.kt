@@ -44,12 +44,12 @@ fun AudioRecorder(
         IconButton(
             modifier = Modifier.wrapContentSize(),
             onClick = {
-                isRecording = if (isRecording) {
+                if (isRecording) {
                     onStopRequested()
-                    false
+                    isRecording =false
                 } else {
                     onRecordRequested()
-                    true
+                    isRecording =true
                 }
             }) {
             if (isRecording)
