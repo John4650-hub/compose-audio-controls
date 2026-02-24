@@ -1,7 +1,6 @@
 # compose-audio-controls
-
+[![](https://jitpack.io/v/John4650-hub/compose-audio-controls.svg)](https://jitpack.io/#John4650-hub/compose-audio-controls)
 <div id="header" align="center">
-  <a href="https://jitpack.io/#ygorluizfrazao/compose-audio-controls"><img src="https://jitpack.io/v/ygorluizfrazao/compose-audio-controls.svg" alt="Version Name"/></a>
   <img src="https://komarev.com/ghpvc/?username=ygorluizfrazao&style=flat-square&color=blue" alt=""/>
 </div>
 <div id="badges" align="center">
