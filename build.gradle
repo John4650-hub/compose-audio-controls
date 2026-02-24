@@ -1,26 +1,25 @@
-// Top-level build file where you can add configuration options common to all sub-projects/modules.
 buildscript {
     ext {
         kotlin_version = '1.13.0'
-        compose_version= '1.4.0'
+        compose_version = '1.4.0'
         libs_version = '1.0.3-alpha01'
     }
     dependencies {
-    classpath "com.android.tools.build:gradle:8.13.2"
-}
-
-}
-
-tasks.configureEach { task ->
-    if (task.name == "javaDocReleaseGeneration") {
-        task.enabled = false
+        classpath "com.android.tools.build:gradle:8.13.2"
     }
 }
-
 
 plugins {
     id 'com.android.application' apply false
     id 'com.android.library' apply false
     id 'org.jetbrains.kotlin.android' apply false
     id 'org.jetbrains.kotlin.plugin.compose' apply false
+}
+
+subprojects {
+    tasks.configureEach { task ->
+        if (task.name == "javaDocReleaseGeneration") {
+            task.enabled = false
+        }
+    }
 }
