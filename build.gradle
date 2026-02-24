@@ -11,6 +11,13 @@ buildscript {
 
 }
 
+tasks.configureEach { task ->
+    if (task.name == "javaDocReleaseGeneration") {
+        task.enabled = false
+    }
+}
+
+
 plugins {
     id 'com.android.application' apply false
     id 'com.android.library' apply false
