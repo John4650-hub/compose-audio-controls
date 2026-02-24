@@ -85,9 +85,10 @@ fun AudioPlayer(
                         Spacer(modifier = Modifier.size(4.dp))
                     }
                 },
-                track = {
+                track = {it->
                     SliderDefaults.Track(
-                        sliderPositions = it, colors = SliderDefaults.colors(
+                        sliderState = it, 
+                        colors = SliderDefaults.colors(
                             inactiveTrackColor = LocalContentColor.current.copy(alpha = 0.5f)
                         )
                     )
