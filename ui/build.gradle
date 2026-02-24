@@ -6,7 +6,7 @@ plugins {
 
 android {
     namespace 'br.com.frazo.ui'
-    compileSdk 33
+    compileSdk 36
 
     defaultConfig {
         minSdk 23
