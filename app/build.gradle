@@ -1,7 +1,9 @@
 plugins {
     id 'com.android.application'
     id 'org.jetbrains.kotlin.android'
+    id 'org.jetbrains.kotlin.plugin.compose'
 }
+
 
 android {
     namespace 'br.com.frazo.composeaudiocontrols'
@@ -22,6 +24,10 @@ android {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
+    }
+    
+    buildFeatures{
+        compose true
     }
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
