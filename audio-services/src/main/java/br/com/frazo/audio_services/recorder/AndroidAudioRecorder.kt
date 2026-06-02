@@ -4,193 +4,190 @@ import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.MediaRecorder
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.launch
+import java.io.File
 import java.io.FileOutputStream
-import java.nio.ByteBuffer
-import java.nio.ByteOrder
+import java.util.UUID
 import com.theeasiestway.opus.Constants
 import com.theeasiestway.opus.Opus
 
-/**
- * Very small wrapper that records from the microphone,
- * encodes the PCM data to Opus and writes the raw Opus bytes
- * into a file.
- */
 class AndroidAudioRecorder(
     private val dispatcher: CoroutineDispatcher
 ) : AudioRecorder {
 
-    /** Interval used only for the UI Flow – it doesn’t touch audio. */
-    private val UPDATE_INTERVAL_MS = 50L
+    private val UPDATE_DATA_INTERVAL_MILLIS = 50L
 
     private var recorder: AudioRecord? = null
-    private var recordThread: Thread? = null
-    private var recordingJobId: String? = null
-
-    /* ------------------------------------------------------------------ */
-    /* State flow used by the UI – not relevant for the codec logic.       */
-    /* ------------------------------------------------------------------ */
-
+    private var recordingThread: Thread? = null
+    private var audioRecordingDataFlowID: String? = null
     private val _audioRecordingData =
         MutableStateFlow<AudioRecordingData>(AudioRecordingData.NotStarted)
+    private val audioRecordingData = _audioRecordingData.asStateFlow()
+
+    private var isPaused = false
+
+    // Opus codec instance
+    private val codec = Opus()
 
     override fun startRecording(outputFile: File): Flow<AudioRecordingData> {
-        stopRecording()   // make sure we’re clean
+        stopRecording()
 
-        /* ------------------------------------------------------------------ */
-        /* ----- 1️⃣  Initialise Opus encoder --------------------------------*/
-        /* ------------------------------------------------------------------ */
+        val SAMPLE_RATE = Constants.SampleRate._48000() // Assuming 48kHz as per Code 1's context
+        val CHANNELS = Constants.Channels.mono() // Focusing on mono for simplicity based on original setup
+        val APPLICATION = Constants.Application.audio() // Ensure application type is set correctly
 
-        val sampleRate = Constants.SampleRate._48000()
-        val channels   = Constants.Channels.mono()          // mono only in this example
-        val application = Constants.Application.audio()
+        // --- Opus Configuration based on constants ---
+        val FRAME_SIZE = Constants.FrameSize._120() // Example frame size (e.g., 120 samples)
 
-        /* Encoder parameters – copy from the working demo */
-        val frameSize  = Constants.FrameSize._120()      // samples / channel (120, 240 …)
+        // Init encoder/decoder
+        codec.encoderInit(SAMPLE_RATE, CHANNELS, APPLICATION)
+        codec.decoderInit(SAMPLE_RATE, CHANNELS)
 
-        codec.encoderInit(sampleRate, channels, application)
-        codec.decoderInit(sampleRate, channels)
-
-        codec.encoderSetComplexity(Constants.Complexity.instance(10))
-        codec.encoderSetBitrate(Constants.Bitrate.max())
-
-        /* ------------------------------------------------------------------ */
-        /* ----- 2️⃣  Configure Android AudioRecord --------------------------*/
-        /* ------------------------------------------------------------------ */
+        // Optional encoder setup
+        val COMPLEXITY = Constants.Complexity.instance(10)
+        val BITRATE = Constants.Bitrate.max()
+        codec.encoderSetComplexity(COMPLEXITY)
+        codec.encoderSetBitrate(BITRATE)
 
         val channelConfig = AudioFormat.CHANNEL_IN_MONO
-        val audioFormat   = AudioFormat.ENCODING_PCM_16BIT
+        val audioFormat = AudioFormat.ENCODING_PCM_16BIT
+        // Determine buffer size based on the required settings
+        val bufferSize = AudioRecord.getMinBufferSize(SAMPLE_RATE.v, channelConfig, audioFormat)
 
-        // smallest buffer that will not cause overruns
-        val minBufSize = AudioRecord.getMinBufferSize(
-            sampleRate.v,
-            channelConfig,
-            audioFormat
-        )
         recorder = AudioRecord(
             MediaRecorder.AudioSource.MIC,
-            sampleRate.v,
+            SAMPLE_RATE.v,
             channelConfig,
             audioFormat,
-            minBufSize
+            bufferSize
         )
-
-        /* ------------------------------------------------------------------ */
-        /* ----- 3️⃣  Start recording and encoding loop ---------------------*/
-        /* ------------------------------------------------------------------ */
 
         val fos = FileOutputStream(outputFile)
         recorder?.startRecording()
 
-        recordThread = Thread {
-            // We'll read exactly `frameSize` samples every iteration
-            val shortBuffer = ShortArray(frameSize)
-            var finished = false
+        // Ensure the file stream is flushed/opened correctly before thread starts reading
+        fos.flush()
+
+
+        // Background thread: capture PCM → encode → write encoded packets
+        recordingThread = Thread {
+            // Use a fixed buffer size for reliable reading operations
+            val pcmBuffer = ByteArray(bufferSize)
+            var totalFramesEncoded = 0
 
             while (recorder?.recordingState == AudioRecord.RECORDSTATE_RECORDING) {
-                val readSamples = recorder?.read(shortBuffer, 0, frameSize) ?: 0
-                if (readSamples <= 0) continue        // nothing to do in this cycle
+                if (!isPaused) {
+                    // Read data from the hardware
+                    val readSize = recorder?.read(pcmBuffer, 0, pcmBuffer.size) ?: 0
 
-                /* Encode the short[] → raw Opus bytes */
-                val encodedShorts = codec.encode(shortBuffer, frameSize)
-                if (!encodedShorts.isNullOrEmpty()) {
-                    /*
-                     * The library returns a ShortArray that represents little‑endian
-                     * 16 bit PCM of the encoded data. Convert it to a byte[] before
-                     * writing to disk.
-                     */
-                    val rawOpus = shortArrayToByteArray(encodedShorts)
-                    fos.write(rawOpus)
+                    if (readSize > 0) {
+                        // Encode PCM into Opus
+                        // We must ensure the input buffer size matches what the codec expects for encoding
+                        val encoded = codec.encode(pcmBuffer, FRAME_SIZE)
+
+                        if (encoded != null) {
+                            try {
+                                fos.write(encoded)
+                                totalFramesEncoded++
+                            } catch (e: java.io.IOException) {
+                                // Handle write failure gracefully if necessary, though usually fatal in this context
+                                break
+                            }
+                        }
+                    }
+                } else {
+                    // If paused, we still need to wait for the stop signal or resume command
+                    delay(100)
                 }
             }
 
-            /* ----- 4️⃣   Cleanup ---------------------------------------*/
-            fos.close()
-            finished = true
-        }.apply { start() }
+            // Final flush and state update upon stopping
+            try {
+                fos.flush()
+            } catch (e: Exception) { /* ignore */ }
 
-        /* ------------------------------------------------------------------ */
-        /* ----- 5️⃣  Start Flow that keeps track of elapsed time ----------*/
-        /* ------------------------------------------------------------------ */
+        }.apply { name = "OpusRecordingThread" } // Naming thread for debugging
+        recordingThread?.start()
 
-        val flowId = java.util.UUID.randomUUID().toString()
-        recordingJobId?.let { old -> _audioRecordingData.value = AudioRecordingData.NotStarted }
-        recordingJobId = flowId
-        _audioRecordingData.value = AudioRecordingData.Recording(0, 0)
 
-        CoroutineScope(dispatcher).launch {
-            startFlowingAudioRecordingData(flowId)
-                .takeWhile { it is AudioRecordingData.Recording } // stop when finished
-                .collectLatest { _audioRecordingData.value = it }
+        UUID.randomUUID().toString().also { uuid ->
+            audioRecordingDataFlowID = uuid
+            _audioRecordingData.value = AudioRecordingData.Recording(0, 0)
+            CoroutineScope(dispatcher).launch {
+                startFlowingAudioRecordingData(uuid)
+                    .collectLatest { _audioRecordingData.value = it }
+            }
         }
 
-        return _audioRecordingData.asStateFlow()
+        return audioRecordingData
     }
 
     override fun stopRecording() {
-        recordingJobId = null
-
+        // 1. Stop recording hardware access immediately
         recorder?.stop()
+
+        // 2. Interrupt the background thread to stop reading/writing
+        recordingThread?.interrupt()
+
+        // 3. Release resources
         recorder?.release()
         recorder = null
 
-        recordThread?.interrupt()
-        recordThread = null
-
+        // 4. Release Opus resources
         codec.encoderRelease()
         codec.decoderRelease()
+
+        audioRecordingDataFlowID = null
+        recordingThread = null
 
         _audioRecordingData.value = AudioRecordingData.NotStarted
     }
 
-    /* ------------------------------------------------------------------ */
-    /* -----  Pause / Resume – purely UI helpers ------------------------*/
-    /* ------------------------------------------------------------------ */
-
-    private var isPaused = false
-
     override fun pause() {
-        val now = _audioRecordingData.value
-        if (now is AudioRecordingData.Recording) {
+        val currentData = _audioRecordingData.value
+        if (currentData is AudioRecordingData.Recording) {
             isPaused = true
-            _audioRecordingData.value =
-                AudioRecordingData.Paused(now.elapsedTime, 0)
+            // Update state to Paused, keeping elapsed time the same
+            _audioRecordingData.value = AudioRecordingData.Paused(
+                currentData.elapsedTime,
+                0 // Reset tracking for paused state
+            )
         }
     }
 
     override fun resume() {
-        val now = _audioRecordingData.value
-        if (now is AudioRecordingData.Paused) {
+        val currentData = _audioRecordingData.value
+        if (currentData is AudioRecordingData.Paused) {
             isPaused = false
-            _audioRecordingData.value =
-                AudioRecordingData.Recording(now.elapsedTime, 0)
+            // Resume recording from the exact point it was paused
+            _audioRecordingData.value = AudioRecordingData.Recording(
+                currentData.elapsedTime,
+                0 // Reset tracking for resumption
+            )
         }
     }
 
-    /* ------------------------------------------------------------------ */
-    /* -----  Flow that emits elapsed time while recording ------------*/
-    /* ------------------------------------------------------------------ */
+    private fun startFlowingAudioRecordingData(flowId: String): Flow<AudioRecordingData> {
+        return flow {
+            while (true) {
+                // Check if the flow ID is still valid and recording is active
+                if (flowId != audioRecordingDataFlowID || _audioRecordingData.value !is AudioRecordingData.Recording) break
 
-    private fun startFlowingAudioRecordingData(flowId: String): Flow<AudioRecordingData> = flow {
-        var elapsed = 0L
-        while (true) {
-            if (flowId != recordingJobId) break
-            val cur = _audioRecordingData.value
-            if (cur !is AudioRecordingData.Recording) break
-
-            if (!isPaused) elapsed += UPDATE_INTERVAL_MS
-
-            emit(AudioRecordingData.Recording(elapsed, 0))
-            delay(UPDATE_INTERVAL_MS)
+                val currentData = _audioRecordingData.value
+                if (currentData is AudioRecordingData.Recording) {
+                    // Emit updated time, only updating the timestamp in this flow
+                    emit(
+                        AudioRecordingData.Recording(
+                            currentData.elapsedTime + UPDATE_DATA_INTERVAL_MILLIS,
+                            0
+                        )
+                    )
+                }
+                delay(UPDATE_DATA_INTERVAL_MILLIS)
+            }
         }
     }
-
-    /* ------------------------------------------------------------------ */
-    /* -----  Helper: convert ShortArray → little‑endian ByteArray --------*/
-    /* ------------------------------------------------------------------ */
-
-    private fun shortArrayToByteArray(arr: ShortArray): ByteArray =
-        ByteBuffer.allocate(arr.size * 2).order(ByteOrder.LITTLE_ENDIAN)
-            .putShorts(*arr)
-            .array()
 }
