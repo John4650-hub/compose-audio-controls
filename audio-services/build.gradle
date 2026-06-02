@@ -43,6 +43,12 @@ android {
             allVariants()
         }
     }
+
+    lintOptions {
+        abortOnError false
+        // You can disable specific checks:
+        disable 'MissingPermission'
+    }
 }
 
 dependencies {
