@@ -1,4 +1,5 @@
 package br.com.frazo.audio_services.player
+
 import android.media.AudioFormat
 import android.media.AudioManager
 import android.media.AudioTrack
@@ -30,13 +31,15 @@ class AndroidAudioPlayer(
         stop()
 
         val SAMPLE_RATE = Constants.SampleRate._48000()
-        val CHANNELS = Constants.Channels.stereo()
-        val FRAME_SIZE = Constants.FrameSize._120()
+        val CHANNELS = Constants.Channels.mono() // match recorder!
+        val DEF_FRAME_SIZE = Constants.FrameSize._120()
+        val CHUNK_SIZE = DEF_FRAME_SIZE.v * CHANNELS.v * 2
+        val FRAME_SIZE_SHORT = Constants.FrameSize.fromValue(CHUNK_SIZE / CHANNELS.v)
 
         // Init decoder
         codec.decoderInit(SAMPLE_RATE, CHANNELS)
 
-        val channelConfig = AudioFormat.CHANNEL_OUT_STEREO
+        val channelConfig = AudioFormat.CHANNEL_OUT_MONO
         val audioFormat = AudioFormat.ENCODING_PCM_16BIT
         val bufferSize = AudioTrack.getMinBufferSize(SAMPLE_RATE.v, channelConfig, audioFormat)
 
@@ -55,12 +58,12 @@ class AndroidAudioPlayer(
         // Background thread: read encoded Opus packets → decode → play PCM
         val fis = FileInputStream(file)
         flowJob = CoroutineScope(dispatcher).launch {
-            val encodedBuffer = ByteArray(4000)
+            val encodedBuffer = ByteArray(CHUNK_SIZE)
             while (isActive && audioTrack?.playState == AudioTrack.PLAYSTATE_PLAYING) {
                 val read = fis.read(encodedBuffer)
                 if (read <= 0) break
 
-                val decoded = codec.decode(encodedBuffer.copyOf(read), FRAME_SIZE)
+                val decoded = codec.decode(encodedBuffer.copyOf(read), FRAME_SIZE_SHORT)
                 if (decoded != null) {
                     audioTrack?.write(decoded, 0, decoded.size)
                 }
@@ -106,7 +109,6 @@ class AndroidAudioPlayer(
     override fun seek(position: Long) {
         // Seeking in Opus stream requires indexed packets or custom container.
         // Not implemented here.
-        // TODO
     }
 
     private fun startFlowing(uniqueId: String): Flow<AudioPlayingData> {

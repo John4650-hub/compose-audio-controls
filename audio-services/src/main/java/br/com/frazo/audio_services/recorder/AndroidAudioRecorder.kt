@@ -1,13 +1,9 @@
 package br.com.frazo.audio_services.recorder
-
-import android.media.AudioFormat
-import android.media.AudioRecord
-import android.media.MediaRecorder
-import kotlinx.coroutines.CoroutineDispatcher
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.delay
+import android.media.*
+import android.media.audiofx.AutomaticGainControl
+import android.media.audiofx.NoiseSuppressor
+import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
-import kotlinx.coroutines.launch
 import java.io.File
 import java.io.FileOutputStream
 import java.util.UUID
@@ -32,29 +28,32 @@ class AndroidAudioRecorder(
     // Opus codec instance
     private val codec = Opus()
 
+    // Noise reduction
+    private var noiseSuppressor: NoiseSuppressor? = null
+    private var automaticGainControl: AutomaticGainControl? = null
+
     override fun startRecording(outputFile: File): Flow<AudioRecordingData> {
         stopRecording()
 
-        val SAMPLE_RATE = Constants.SampleRate._48000() // Assuming 48kHz as per Code 1's context
-        val CHANNELS = Constants.Channels.mono() // Focusing on mono for simplicity based on original setup
-        val APPLICATION = Constants.Application.audio() // Ensure application type is set correctly
+        val SAMPLE_RATE = Constants.SampleRate._48000()
+        val CHANNELS = Constants.Channels.mono()
+        val APPLICATION = Constants.Application.audio()
+        val DEF_FRAME_SIZE = Constants.FrameSize._120()
 
-        // --- Opus Configuration based on constants ---
-        val FRAME_SIZE = Constants.FrameSize._120() // Example frame size (e.g., 120 samples)
+        // Calculate chunk size and frame size correctly
+        val CHUNK_SIZE = DEF_FRAME_SIZE.v * CHANNELS.v * 2
+        val FRAME_SIZE_SHORT = Constants.FrameSize.fromValue(CHUNK_SIZE / CHANNELS.v)
 
         // Init encoder/decoder
         codec.encoderInit(SAMPLE_RATE, CHANNELS, APPLICATION)
         codec.decoderInit(SAMPLE_RATE, CHANNELS)
 
         // Optional encoder setup
-        val COMPLEXITY = Constants.Complexity.instance(10)
-        val BITRATE = Constants.Bitrate.max()
-        codec.encoderSetComplexity(COMPLEXITY)
-        codec.encoderSetBitrate(BITRATE)
+        codec.encoderSetComplexity(Constants.Complexity.instance(10))
+        codec.encoderSetBitrate(Constants.Bitrate.max())
 
         val channelConfig = AudioFormat.CHANNEL_IN_MONO
         val audioFormat = AudioFormat.ENCODING_PCM_16BIT
-        // Determine buffer size based on the required settings
         val bufferSize = AudioRecord.getMinBufferSize(SAMPLE_RATE.v, channelConfig, audioFormat)
 
         recorder = AudioRecord(
@@ -65,53 +64,37 @@ class AndroidAudioRecorder(
             bufferSize
         )
 
+        // Attach noise suppressor + AGC
+        recorder?.audioSessionId?.let { sessionId ->
+            if (NoiseSuppressor.isAvailable()) {
+                noiseSuppressor = NoiseSuppressor.create(sessionId)
+                noiseSuppressor?.enabled = true
+            }
+            if (AutomaticGainControl.isAvailable()) {
+                automaticGainControl = AutomaticGainControl.create(sessionId)
+                automaticGainControl?.enabled = true
+            }
+        }
+
         val fos = FileOutputStream(outputFile)
         recorder?.startRecording()
 
-        // Ensure the file stream is flushed/opened correctly before thread starts reading
-        fos.flush()
-
-
         // Background thread: capture PCM → encode → write encoded packets
         recordingThread = Thread {
-            // Use a fixed buffer size for reliable reading operations
-            val pcmBuffer = ByteArray(bufferSize)
-            var totalFramesEncoded = 0
-
+            val shortBuffer = ShortArray(CHUNK_SIZE / 2) // 2 bytes per sample
             while (recorder?.recordingState == AudioRecord.RECORDSTATE_RECORDING) {
                 if (!isPaused) {
-                    // Read data from the hardware
-                    val readSize = recorder?.read(pcmBuffer, 0, pcmBuffer.size) ?: 0
-
-                    if (readSize > 0) {
-                        // Encode PCM into Opus
-                        // We must ensure the input buffer size matches what the codec expects for encoding
-                        val encoded = codec.encode(pcmBuffer, FRAME_SIZE)
-
+                    val read = recorder?.read(shortBuffer, 0, shortBuffer.size) ?: 0
+                    if (read > 0) {
+                        val encoded = codec.encode(shortBuffer, FRAME_SIZE_SHORT)
                         if (encoded != null) {
-                            try {
-                                fos.write(encoded)
-                                totalFramesEncoded++
-                            } catch (e: java.io.IOException) {
-                                // Handle write failure gracefully if necessary, though usually fatal in this context
-                                break
-                            }
+                            fos.write(encoded)
                         }
                     }
-                } else {
-                    // If paused, we still need to wait for the stop signal or resume command
-                    //delay(100)
                 }
             }
-
-            // Final flush and state update upon stopping
-            try {
-                fos.flush()
-            } catch (e: Exception) { /* ignore */ }
-
-        }.apply { name = "OpusRecordingThread" } // Naming thread for debugging
-        recordingThread?.start()
-
+            fos.close()
+        }.apply { start() }
 
         UUID.randomUUID().toString().also { uuid ->
             audioRecordingDataFlowID = uuid
@@ -126,22 +109,22 @@ class AndroidAudioRecorder(
     }
 
     override fun stopRecording() {
-        // 1. Stop recording hardware access immediately
+        audioRecordingDataFlowID = null
         recorder?.stop()
-
-        // 2. Interrupt the background thread to stop reading/writing
-        recordingThread?.interrupt()
-
-        // 3. Release resources
         recorder?.release()
         recorder = null
+        recordingThread?.interrupt()
+        recordingThread = null
 
-        // 4. Release Opus resources
+        // Release Opus resources
         codec.encoderRelease()
         codec.decoderRelease()
 
-        audioRecordingDataFlowID = null
-        recordingThread = null
+        // Release noise reduction
+        noiseSuppressor?.release()
+        automaticGainControl?.release()
+        noiseSuppressor = null
+        automaticGainControl = null
 
         _audioRecordingData.value = AudioRecordingData.NotStarted
     }
@@ -150,10 +133,9 @@ class AndroidAudioRecorder(
         val currentData = _audioRecordingData.value
         if (currentData is AudioRecordingData.Recording) {
             isPaused = true
-            // Update state to Paused, keeping elapsed time the same
             _audioRecordingData.value = AudioRecordingData.Paused(
                 currentData.elapsedTime,
-                0 // Reset tracking for paused state
+                0
             )
         }
     }
@@ -162,10 +144,9 @@ class AndroidAudioRecorder(
         val currentData = _audioRecordingData.value
         if (currentData is AudioRecordingData.Paused) {
             isPaused = false
-            // Resume recording from the exact point it was paused
             _audioRecordingData.value = AudioRecordingData.Recording(
                 currentData.elapsedTime,
-                0 // Reset tracking for resumption
+                0
             )
         }
     }
@@ -173,12 +154,10 @@ class AndroidAudioRecorder(
     private fun startFlowingAudioRecordingData(flowId: String): Flow<AudioRecordingData> {
         return flow {
             while (true) {
-                // Check if the flow ID is still valid and recording is active
-                if (flowId != audioRecordingDataFlowID || _audioRecordingData.value !is AudioRecordingData.Recording) break
-
+                if (flowId != audioRecordingDataFlowID) break
                 val currentData = _audioRecordingData.value
+                if (currentData is AudioRecordingData.NotStarted) break
                 if (currentData is AudioRecordingData.Recording) {
-                    // Emit updated time, only updating the timestamp in this flow
                     emit(
                         AudioRecordingData.Recording(
                             currentData.elapsedTime + UPDATE_DATA_INTERVAL_MILLIS,
@@ -191,3 +170,4 @@ class AndroidAudioRecorder(
         }
     }
 }
+
