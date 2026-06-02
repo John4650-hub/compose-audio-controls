@@ -100,7 +100,7 @@ class AndroidAudioRecorder(
                     }
                 } else {
                     // If paused, we still need to wait for the stop signal or resume command
-                    delay(100)
+                    //delay(100)
                 }
             }
 
