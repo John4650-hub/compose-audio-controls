@@ -46,7 +46,7 @@ android {
 }
 
 dependencies {
-
+    implementation 'com.github.AceAtDev:android-opus-codec:1.0.6'
     implementation "androidx.core:core-ktx:$kotlin_version"
     implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.6.4"
     implementation "androidx.compose.runtime:runtime:$compose_version"
