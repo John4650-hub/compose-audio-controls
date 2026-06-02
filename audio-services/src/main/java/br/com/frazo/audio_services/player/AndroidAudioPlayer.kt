@@ -1,114 +1,128 @@
 package br.com.frazo.audio_services.player
-
-import android.content.Context
-import android.media.MediaPlayer
-import android.util.Log
-import androidx.core.net.toUri
+import android.media.AudioFormat
+import android.media.AudioManager
+import android.media.AudioTrack
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import java.io.File
-import java.util.UUID
+import java.io.FileInputStream
+import java.util.*
+import com.theeasiestway.opus.Constants
+import com.theeasiestway.opus.Opus
 
 class AndroidAudioPlayer(
-    private val context: Context,
     private val dispatcher: CoroutineDispatcher = Dispatchers.Default
 ) : AudioPlayer {
 
     private val UPDATE_DATA_INTERVAL_MILLIS = 200L
 
-    private var player: MediaPlayer? = null
+    private var audioTrack: AudioTrack? = null
     private val _audioPlayingData =
         MutableStateFlow(AudioPlayingData(AudioPlayerStatus.NOT_INITIALIZED, 0, 0))
     private val audioPlayingData = _audioPlayingData.asStateFlow()
     private var flowJob: Job? = null
     private var currentUniqueId: String? = null
 
-    override fun start(file: File): Flow<AudioPlayingData> {
+    // Opus codec instance for decoding
+    private val codec = Opus()
 
+    override fun start(file: File): Flow<AudioPlayingData> {
         stop()
 
-        player = MediaPlayer.create(context, file.toUri()).apply {
-            currentUniqueId = UUID.randomUUID().toString()
-            start()
-            setOnCompletionListener {
-                this@AndroidAudioPlayer.stop()
+        val SAMPLE_RATE = Constants.SampleRate._48000()
+        val CHANNELS = Constants.Channels.stereo()
+        val FRAME_SIZE = Constants.FrameSize._120()
+
+        // Init decoder
+        codec.decoderInit(SAMPLE_RATE, CHANNELS)
+
+        val channelConfig = AudioFormat.CHANNEL_OUT_STEREO
+        val audioFormat = AudioFormat.ENCODING_PCM_16BIT
+        val bufferSize = AudioTrack.getMinBufferSize(SAMPLE_RATE, channelConfig, audioFormat)
+
+        audioTrack = AudioTrack(
+            AudioManager.STREAM_MUSIC,
+            SAMPLE_RATE,
+            channelConfig,
+            audioFormat,
+            bufferSize,
+            AudioTrack.MODE_STREAM
+        )
+
+        currentUniqueId = UUID.randomUUID().toString()
+        audioTrack?.play()
+
+        // Background thread: read encoded Opus packets → decode → play PCM
+        val fis = FileInputStream(file)
+        flowJob = CoroutineScope(dispatcher).launch {
+            val encodedBuffer = ByteArray(4000)
+            while (isActive && audioTrack?.playState == AudioTrack.PLAYSTATE_PLAYING) {
+                val read = fis.read(encodedBuffer)
+                if (read <= 0) break
+
+                val decoded = codec.decode(encodedBuffer.copyOf(read), FRAME_SIZE)
+                if (decoded != null) {
+                    audioTrack?.write(decoded, 0, decoded.size)
+                }
             }
+            fis.close()
+            stop()
         }
 
         _audioPlayingData.value = _audioPlayingData.value.copy(status = AudioPlayerStatus.PLAYING)
-        flowJob = CoroutineScope(dispatcher).launch {
+
+        // Flow updates for duration/elapsed
+        CoroutineScope(dispatcher).launch {
             currentUniqueId?.let {
-                startFlowing(it)
-                    .collectLatest {
-                        _audioPlayingData.value = it
-                    }
+                startFlowing(it).collectLatest { _audioPlayingData.value = it }
             }
         }
+
         return audioPlayingData
     }
 
     override fun pause() {
-        player?.let {
-            it.pause()
-            _audioPlayingData.value =
-                _audioPlayingData.value.copy(status = AudioPlayerStatus.PAUSED)
-        }
+        audioTrack?.pause()
+        _audioPlayingData.value = _audioPlayingData.value.copy(status = AudioPlayerStatus.PAUSED)
     }
 
     override fun resume() {
-        player?.let {
-            if (!it.isPlaying)
-                it.start()
-            _audioPlayingData.value =
-                _audioPlayingData.value.copy(status = AudioPlayerStatus.PLAYING)
-        }
+        audioTrack?.play()
+        _audioPlayingData.value = _audioPlayingData.value.copy(status = AudioPlayerStatus.PLAYING)
     }
 
     override fun stop() {
-
         flowJob?.cancel()
-        player?.let {
-            if (it.isPlaying) {
-                it.stop()
-            }
-            it.reset()
-            it.release()
-        }
-        player = null
+        audioTrack?.stop()
+        audioTrack?.release()
+        audioTrack = null
+
+        // Release decoder
+        codec.decoderRelease()
+
         _audioPlayingData.value = AudioPlayingData(AudioPlayerStatus.NOT_INITIALIZED, 0, 0)
     }
 
     override fun seek(position: Long) {
-        player?.let {
-            if(_audioPlayingData.value.status!=AudioPlayerStatus.NOT_INITIALIZED){
-                it.seekTo(position.toInt())
-            }
-        }
+        // Seeking in Opus stream requires indexed packets or custom container.
+        // Not implemented here.
+        // TODO
     }
-
 
     private fun startFlowing(uniqueId: String): Flow<AudioPlayingData> {
         return flow {
             while (true) {
-                //finishes the flow
-                if (player == null) {
-                    Log.d("Audio Player: ","Exit")
-                    return@flow
-                }
+                if (audioTrack == null) return@flow
+                if (uniqueId != currentUniqueId) return@flow
 
-                player?.let {
-                    if (uniqueId != currentUniqueId) {
-                        Log.d("Audio Player: ","Exit")
-                        return@flow
-                    }
-                    val newData = _audioPlayingData.value.copy(
-                        duration = it.duration.toLong(),
-                        elapsed = it.currentPosition.toLong()
-                    )
-                    emit(newData)
-                }
+                val newData = _audioPlayingData.value.copy(
+                    duration = 0, // Opus stream duration requires container metadata
+                    elapsed = audioTrack?.playbackHeadPosition?.toLong() ?: 0
+                )
+                emit(newData)
                 delay(UPDATE_DATA_INTERVAL_MILLIS)
             }
         }
     }
 }
+
