@@ -42,7 +42,7 @@ class AndroidAudioRecorder(
 
         // Calculate chunk size and frame size correctly
         val CHUNK_SIZE = DEF_FRAME_SIZE.v * CHANNELS.v * 2
-        val FRAME_SIZE_SHORT = Constants.FrameSize.fromValue(CHUNK_SIZE / CHANNELS.v)
+        val FRAME_SIZE_BYTE = Constants.FrameSize.fromValue(CHUNK_SIZE / 2 / CHANNELS.v)
 
         // Init encoder/decoder
         codec.encoderInit(SAMPLE_RATE, CHANNELS, APPLICATION)
@@ -86,7 +86,7 @@ class AndroidAudioRecorder(
                 if (!isPaused) {
                     val read = recorder?.read(shortBuffer, 0, shortBuffer.size) ?: 0
                     if (read > 0) {
-                        val encoded = codec.encode(shortBuffer, FRAME_SIZE_SHORT)
+                        val encoded = codec.encode(shortBuffer, FRAME_SIZE_BYTE)
                         if (encoded != null) {
                             fos.write(encoded)
                         }
