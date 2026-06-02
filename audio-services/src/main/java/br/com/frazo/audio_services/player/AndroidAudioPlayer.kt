@@ -38,11 +38,11 @@ class AndroidAudioPlayer(
 
         val channelConfig = AudioFormat.CHANNEL_OUT_STEREO
         val audioFormat = AudioFormat.ENCODING_PCM_16BIT
-        val bufferSize = AudioTrack.getMinBufferSize(SAMPLE_RATE, channelConfig, audioFormat)
+        val bufferSize = AudioTrack.getMinBufferSize(SAMPLE_RATE.v, channelConfig, audioFormat)
 
         audioTrack = AudioTrack(
             AudioManager.STREAM_MUSIC,
-            SAMPLE_RATE,
+            SAMPLE_RATE.v,
             channelConfig,
             audioFormat,
             bufferSize,

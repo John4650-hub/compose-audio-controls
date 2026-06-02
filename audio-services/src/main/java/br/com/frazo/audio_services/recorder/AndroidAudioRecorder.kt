@@ -51,11 +51,11 @@ class AndroidAudioRecorder(
 
         val channelConfig = AudioFormat.CHANNEL_IN_STEREO
         val audioFormat = AudioFormat.ENCODING_PCM_16BIT
-        val bufferSize = AudioRecord.getMinBufferSize(SAMPLE_RATE, channelConfig, audioFormat)
+        val bufferSize = AudioRecord.getMinBufferSize(SAMPLE_RATE.v, channelConfig, audioFormat)
 
         recorder = AudioRecord(
             MediaRecorder.AudioSource.MIC,
-            SAMPLE_RATE,
+            SAMPLE_RATE.v,
             channelConfig,
             audioFormat,
             bufferSize
