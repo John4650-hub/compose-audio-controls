@@ -4,8 +4,14 @@ buildscript {
         compose_version = '1.4.0'
         libs_version = '1.0.3-alpha01'
     }
+    repositories {
+      google()
+      mavenCentral()
+      maven { url 'https://jitpack.io' }
+    }
     dependencies {
         classpath "com.android.tools.build:gradle:8.13.2"
+
     }
 }
 
@@ -14,6 +20,7 @@ plugins {
     id 'com.android.library' apply false
     id 'org.jetbrains.kotlin.android' apply false
     id 'org.jetbrains.kotlin.plugin.compose' apply false
+
 }
 
 subprojects {
