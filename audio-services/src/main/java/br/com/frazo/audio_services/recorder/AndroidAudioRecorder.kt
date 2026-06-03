@@ -6,7 +6,6 @@ import android.media.audiofx.NoiseSuppressor
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import java.io.File
-import java.io.FileOutputStream
 import java.nio.ByteBuffer
 import java.util.UUID
 import com.theeasiestway.opus.Constants
@@ -46,10 +45,10 @@ class AndroidAudioRecorder(
         val CHUNK_SIZE = DEF_FRAME_SIZE.v * CHANNELS.v * 2
         val FRAME_SIZE_SHORT = Constants.FrameSize.fromValue(CHUNK_SIZE / CHANNELS.v)
 
-        // Init encoder/decoder
+        // Init encoder/decoder/opusenc
         codec.encoderInit(SAMPLE_RATE, CHANNELS, APPLICATION)
         codec.decoderInit(SAMPLE_RATE, CHANNELS)
-
+        codec.oggEncoderInit(outputFile.absolutePath,SAMPLE_RATE.v,CHANNELS.v,0)
         // Optional encoder setup
         codec.encoderSetComplexity(Constants.Complexity.instance(10))
         codec.encoderSetBitrate(Constants.Bitrate.max())
@@ -79,7 +78,6 @@ class AndroidAudioRecorder(
             }
         }
 
-        val baos = ByteArrayOutputStream()
         recorder?.startRecording()
 
         // Background thread: capture PCM → encode → write encoded packets
@@ -91,12 +89,11 @@ class AndroidAudioRecorder(
                     if (read > 0) {
                         val encoded = codec.encode(shortBuffer, FRAME_SIZE_SHORT)
                         if (encoded != null) {
-                            baos.write(codec.convert(encoded))
+                            codec.writeChunk(encoded,CHANNELS.v)
                         }
                     }
                 }
             }
-            baos.
 
         }.apply { start() }
 
@@ -123,6 +120,7 @@ class AndroidAudioRecorder(
         // Release Opus resources
         codec.encoderRelease()
         codec.decoderRelease()
+        codec.closeOggEncoder()
 
         // Release noise reduction
         noiseSuppressor?.release()
