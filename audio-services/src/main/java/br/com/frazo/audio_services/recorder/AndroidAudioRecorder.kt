@@ -1,4 +1,5 @@
 package br.com.frazo.audio_services.recorder
+import android.annotation.SuppressLint
 import android.media.*
 import android.media.audiofx.AutomaticGainControl
 import android.media.audiofx.NoiseSuppressor
@@ -11,13 +12,6 @@ import java.util.UUID
 import com.theeasiestway.opus.Constants
 import com.theeasiestway.opus.Opus
 
-fun writeShortToBytes(data:ShortArray):ByteArray{
-  val buffer=ByteBuffer.allocate(data.size*2)
-  for(i in data.indices){
-    buffer.putShort(data[i])
-  }
-  return buffer.array()
-}
 class AndroidAudioRecorder(
     private val dispatcher: CoroutineDispatcher
 ) : AudioRecorder {
@@ -46,7 +40,7 @@ class AndroidAudioRecorder(
         val SAMPLE_RATE = Constants.SampleRate._48000()
         val CHANNELS = Constants.Channels.mono()
         val APPLICATION = Constants.Application.audio()
-        val DEF_FRAME_SIZE = Constants.FrameSize._120()
+        val DEF_FRAME_SIZE = Constants.FrameSize._240()
 
         // Calculate chunk size and frame size correctly
         val CHUNK_SIZE = DEF_FRAME_SIZE.v * CHANNELS.v * 2
@@ -64,12 +58,13 @@ class AndroidAudioRecorder(
         val audioFormat = AudioFormat.ENCODING_PCM_16BIT
         val bufferSize = AudioRecord.getMinBufferSize(SAMPLE_RATE.v, channelConfig, audioFormat)
 
+        @SuppressLint("MissingPermission")
         recorder = AudioRecord(
             MediaRecorder.AudioSource.MIC,
             SAMPLE_RATE.v,
             channelConfig,
             audioFormat,
-            bufferSize
+            bufferSize*2
         )
 
         // Attach noise suppressor + AGC
@@ -84,24 +79,25 @@ class AndroidAudioRecorder(
             }
         }
 
-        val fos = FileOutputStream(outputFile)
+        val baos = ByteArrayOutputStream()
         recorder?.startRecording()
 
         // Background thread: capture PCM → encode → write encoded packets
         recordingThread = Thread {
-            val shortBuffer = ShortArray(CHUNK_SIZE / 2) // 2 bytes per sample
+            val shortBuffer = ShortArray(CHUNK_SIZE)
             while (recorder?.recordingState == AudioRecord.RECORDSTATE_RECORDING) {
                 if (!isPaused) {
                     val read = recorder?.read(shortBuffer, 0, shortBuffer.size) ?: 0
                     if (read > 0) {
                         val encoded = codec.encode(shortBuffer, FRAME_SIZE_SHORT)
                         if (encoded != null) {
-                            fos.write(writeShortToBytes(encoded))
+                            baos.write(codec.convert(encoded))
                         }
                     }
                 }
             }
-            fos.close()
+            baos.
+
         }.apply { start() }
 
         UUID.randomUUID().toString().also { uuid ->
