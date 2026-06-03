@@ -52,7 +52,7 @@ android {
 }
 
 dependencies {
-    implementation 'com.github.John4650-hub:android-opus-codec:v1.0.2'
+    implementation 'com.github.John4650-hub:android-opus-codec:v1.0.3'
     implementation "androidx.core:core-ktx:$kotlin_version"
     implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.6.4"
     implementation "androidx.compose.runtime:runtime:$compose_version"
