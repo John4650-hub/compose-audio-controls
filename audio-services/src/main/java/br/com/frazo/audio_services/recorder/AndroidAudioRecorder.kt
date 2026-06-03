@@ -6,10 +6,18 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import java.io.File
 import java.io.FileOutputStream
+import java.nio.ByteBuffer
 import java.util.UUID
 import com.theeasiestway.opus.Constants
 import com.theeasiestway.opus.Opus
 
+fun writeShortToBytes(data:ShortArray):ByteArray{
+  val buffer=ByteBuffer.allocate(data.size*2)
+  for(i in data.indices){
+    buffer.putShort(data[i])
+  }
+  return buffer.array()
+}
 class AndroidAudioRecorder(
     private val dispatcher: CoroutineDispatcher
 ) : AudioRecorder {
@@ -42,7 +50,7 @@ class AndroidAudioRecorder(
 
         // Calculate chunk size and frame size correctly
         val CHUNK_SIZE = DEF_FRAME_SIZE.v * CHANNELS.v * 2
-        val FRAME_SIZE_BYTE = Constants.FrameSize.fromValue(CHUNK_SIZE / 2 / CHANNELS.v)
+        val FRAME_SIZE_SHORT = Constants.FrameSize.fromValue(CHUNK_SIZE / CHANNELS.v)
 
         // Init encoder/decoder
         codec.encoderInit(SAMPLE_RATE, CHANNELS, APPLICATION)
@@ -86,9 +94,9 @@ class AndroidAudioRecorder(
                 if (!isPaused) {
                     val read = recorder?.read(shortBuffer, 0, shortBuffer.size) ?: 0
                     if (read > 0) {
-                        val encoded = codec.encode(shortBuffer, FRAME_SIZE_BYTE)
+                        val encoded = codec.encode(shortBuffer, FRAME_SIZE_SHORT)
                         if (encoded != null) {
-                            fos.write(encoded)
+                            fos.write(writeShortToBytes(encoded))
                         }
                     }
                 }
