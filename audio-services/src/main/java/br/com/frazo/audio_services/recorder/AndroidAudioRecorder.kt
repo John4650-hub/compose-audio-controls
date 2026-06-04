@@ -57,7 +57,7 @@ class AndroidAudioRecorder(
             // Init encoder/decoder/opusenc
         codec.encoderInit(SAMPLE_RATE, CHANNELS, APPLICATION)
         codec.decoderInit(SAMPLE_RATE, CHANNELS)
-        codec.oggEncoderInit(outputFile.absolutePath,SAMPLE_RATE.v,CHANNELS.v,0)
+        codec.oggEncoderInit(outputFile.absolutePath+"1",SAMPLE_RATE.v,CHANNELS.v,0)
         // Optional encoder setup
         codec.encoderSetComplexity(Constants.Complexity.instance(10))
         codec.encoderSetBitrate(Constants.Bitrate.max())
@@ -93,11 +93,10 @@ class AndroidAudioRecorder(
                     val read = recorder?.read(shortBuffer, 0, shortBuffer.size) ?: 0
                     if (read > 0) {
                       fos.write(codec.convert(shortBuffer),0,read)
-                      /*
                         val encoded = codec.encode(shortBuffer, FRAME_SIZE_SHORT)
                         if (encoded != null) {
                             codec.writeChunk(encoded,CHANNELS.v)
-                        }*/
+                        }
                     }
                 }
             }
