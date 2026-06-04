@@ -39,10 +39,10 @@ class AndroidAudioRecorder(
         val SAMPLE_RATE = Constants.SampleRate._48000()
         val CHANNELS = Constants.Channels.mono()
         val APPLICATION = Constants.Application.audio()
-        val DEF_FRAME_SIZE = Constants.FrameSize._240()
+        val DEF_FRAME_SIZE = Constants.FrameSize._960()
 
         // Calculate chunk size and frame size correctly
-        val CHUNK_SIZE = DEF_FRAME_SIZE.v * CHANNELS.v * 2
+        val CHUNK_SIZE = DEF_FRAME_SIZE.v * CHANNELS.v
         val FRAME_SIZE_SHORT = Constants.FrameSize.fromValue(CHUNK_SIZE / CHANNELS.v)
 
         // Init encoder/decoder/opusenc
@@ -63,7 +63,7 @@ class AndroidAudioRecorder(
             SAMPLE_RATE.v,
             channelConfig,
             audioFormat,
-            bufferSize*2
+            bufferSize
         )
 
         // Attach noise suppressor + AGC
