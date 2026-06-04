@@ -43,9 +43,15 @@ class AndroidAudioRecorder(
 
         // Calculate chunk size and frame size correctly
         val CHUNK_SIZE = DEF_FRAME_SIZE.v * CHANNELS.v
-        val FRAME_SIZE_SHORT = Constants.FrameSize.fromValue(CHUNK_SIZE / CHANNELS.v)
+        val FRAME_SIZE_SHORT = Constants.FrameSize.fromValue(CHUNK_SIZE / CHANNELS.v) 
+        val channelConfig = AudioFormat.CHANNEL_IN_MONO
+        val audioFormat = AudioFormat.ENCODING_PCM_16BIT
+        var bufferSize = AudioRecord.getMinBufferSize(SAMPLE_RATE.v, channelConfig, audioFormat)//in bytes
 
-        // Init encoder/decoder/opusenc
+        if (bufferSize == AudioRecord.ERROR || bufferSize == AudioRecord.ERROR_BAD_VALUE) {
+                bufferSize = SAMPLE_RATE.v * 2;
+            }
+            // Init encoder/decoder/opusenc
         codec.encoderInit(SAMPLE_RATE, CHANNELS, APPLICATION)
         codec.decoderInit(SAMPLE_RATE, CHANNELS)
         codec.oggEncoderInit(outputFile.absolutePath,SAMPLE_RATE.v,CHANNELS.v,0)
@@ -53,13 +59,9 @@ class AndroidAudioRecorder(
         codec.encoderSetComplexity(Constants.Complexity.instance(10))
         codec.encoderSetBitrate(Constants.Bitrate.max())
 
-        val channelConfig = AudioFormat.CHANNEL_IN_MONO
-        val audioFormat = AudioFormat.ENCODING_PCM_16BIT
-        val bufferSize = AudioRecord.getMinBufferSize(SAMPLE_RATE.v, channelConfig, audioFormat)
-
         @SuppressLint("MissingPermission")
         recorder = AudioRecord(
-            MediaRecorder.AudioSource.VOICE_RECOGNITION,
+            MediaRecorder.AudioSource.DEFAULT,
             SAMPLE_RATE.v,
             channelConfig,
             audioFormat,
@@ -82,7 +84,7 @@ class AndroidAudioRecorder(
 
         // Background thread: capture PCM → encode → write encoded packets
         recordingThread = Thread {
-            val shortBuffer = ShortArray(CHUNK_SIZE)
+            val shortBuffer = ShortArray(bufferSize/2)
             while (recorder?.recordingState == AudioRecord.RECORDSTATE_RECORDING) {
                 if (!isPaused) {
                     val read = recorder?.read(shortBuffer, 0, shortBuffer.size) ?: 0
