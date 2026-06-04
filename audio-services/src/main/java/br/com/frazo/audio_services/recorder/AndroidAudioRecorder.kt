@@ -40,7 +40,7 @@ class AndroidAudioRecorder(
         val SAMPLE_RATE = Constants.SampleRate._48000()
         val CHANNELS = Constants.Channels.mono()
         val APPLICATION = Constants.Application.audio()
-        val DEF_FRAME_SIZE = Constants.FrameSize._960()
+        val DEF_FRAME_SIZE = Constants.FrameSize._120()
 
         // Calculate chunk size and frame size correctly
 
