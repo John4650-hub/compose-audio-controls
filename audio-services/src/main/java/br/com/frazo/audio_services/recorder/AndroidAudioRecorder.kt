@@ -59,7 +59,7 @@ class AndroidAudioRecorder(
 
         @SuppressLint("MissingPermission")
         recorder = AudioRecord(
-            MediaRecorder.AudioSource.MIC,
+            MediaRecorder.AudioSource.VOICE_RECOGNITION,
             SAMPLE_RATE.v,
             channelConfig,
             audioFormat,
