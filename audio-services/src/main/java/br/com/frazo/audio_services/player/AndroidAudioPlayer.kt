@@ -30,16 +30,16 @@ class AndroidAudioPlayer(
     override fun start(file: File): Flow<AudioPlayingData> {
         stop()
 
-        val SAMPLE_RATE = Constants.SampleRate._48000().v
+        val SAMPLE_RATE = Constants.SampleRate._48000()
         val CHANNELS = Constants.Channels.mono()
         val channelConfig = AudioFormat.CHANNEL_OUT_MONO
         val audioFormat = AudioFormat.ENCODING_PCM_16BIT
-        val bufferSize = AudioTrack.getMinBufferSize(SAMPLE_RATE, channelConfig, audioFormat)
+        val bufferSize = AudioTrack.getMinBufferSize(SAMPLE_RATE.v, channelConfig, audioFormat)
 
         codec.decoderInit(SAMPLE_RATE, CHANNELS)
         audioTrack = AudioTrack(
             AudioManager.STREAM_MUSIC,
-            SAMPLE_RATE,
+            SAMPLE_RATE.v,
             channelConfig,
             audioFormat,
             bufferSize,
