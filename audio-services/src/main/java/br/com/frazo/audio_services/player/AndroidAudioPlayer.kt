@@ -30,22 +30,21 @@ class AndroidAudioPlayer(
     override fun start(file: File): Flow<AudioPlayingData> {
         stop()
 
-        val SAMPLE_RATE = Constants.SampleRate._48000()
-        val CHANNELS = Constants.Channels.mono() // match recorder!
-        val DEF_FRAME_SIZE = Constants.FrameSize._120()
-        val CHUNK_SIZE = DEF_FRAME_SIZE.v * CHANNELS.v * 2
-        val FRAME_SIZE_SHORT = Constants.FrameSize.fromValue(CHUNK_SIZE / CHANNELS.v)
-
-        // Init decoder
-        codec.decoderInit(SAMPLE_RATE, CHANNELS)
-
+        var SAMPLE_RATE = Constants.SampleRate._48000().v
+        val CHANNELS = Constants.Channels.mono()
         val channelConfig = AudioFormat.CHANNEL_OUT_MONO
         val audioFormat = AudioFormat.ENCODING_PCM_16BIT
-        val bufferSize = AudioTrack.getMinBufferSize(SAMPLE_RATE.v, channelConfig, audioFormat)
+        val bufferSize = AudioTrack.getMinBufferSize(SAMPLE_RATE, channelConfig, audioFormat)
+        if (bufferSize == AudioRecord.ERROR || bufferSize == AudioRecord.ERROR_BAD_VALUE) {
+          //fall back to 16
+          SAMPLE_RATE=16000
+          bufferSize = AudioRecord.getMinBufferSize(SAMPLE_RATE, channelConfig, audioFormat)//in bytes
+            }
 
+        codec.decoderInit(SAMPLE_RATE, CHANNELS)
         audioTrack = AudioTrack(
             AudioManager.STREAM_MUSIC,
-            SAMPLE_RATE.v,
+            SAMPLE_RATE,
             channelConfig,
             audioFormat,
             bufferSize,
@@ -58,12 +57,12 @@ class AndroidAudioPlayer(
         // Background thread: read encoded Opus packets → decode → play PCM
         val fis = FileInputStream(file)
         flowJob = CoroutineScope(dispatcher).launch {
-            val encodedBuffer = ByteArray(CHUNK_SIZE)
+            val encodedBuffer = ByteArray(bufferSize)
             while (isActive && audioTrack?.playState == AudioTrack.PLAYSTATE_PLAYING) {
                 val read = fis.read(encodedBuffer)
                 if (read <= 0) break
 
-                val decoded = codec.decode(encodedBuffer.copyOf(read), FRAME_SIZE_SHORT)
+                val decoded = codec.decode(encodedBuffer, encodedBuffer.size)
                 if (decoded != null) {
                     audioTrack?.write(decoded, 0, decoded.size)
                 }

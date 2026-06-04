@@ -28,40 +28,29 @@ class AndroidAudioRecorder(
     // Opus codec instance
     private val codec = Opus()
 
-    // Noise reduction
-
     override fun startRecording(outputFile: File): Flow<AudioRecordingData> {
         stopRecording()
 
-        val SAMPLE_RATE = Constants.SampleRate._48000()
+        var SAMPLE_RATE = Constants.SampleRate._48000().v
         val CHANNELS = Constants.Channels.mono()
         val APPLICATION = Constants.Application.audio()
-        val DEF_FRAME_SIZE = Constants.FrameSize._480()
-
-        // Calculate chunk size and frame size correctly
-
-        val CHUNK_SIZE = DEF_FRAME_SIZE.v * CHANNELS.v
-        val FRAME_SIZE_SHORT = Constants.FrameSize.fromValue(CHUNK_SIZE / CHANNELS.v) 
         val channelConfig = AudioFormat.CHANNEL_IN_MONO
         val audioFormat = AudioFormat.ENCODING_PCM_16BIT
-        var bufferSize = AudioRecord.getMinBufferSize(SAMPLE_RATE.v, channelConfig, audioFormat)//in bytes
+        var bufferSize = AudioRecord.getMinBufferSize(SAMPLE_RATE, channelConfig, audioFormat)//in bytes
 
         if (bufferSize == AudioRecord.ERROR || bufferSize == AudioRecord.ERROR_BAD_VALUE) {
-                bufferSize = SAMPLE_RATE.v * 2;
+          //fall back to 16
+          SAMPLE_RATE=16000
+          bufferSize = AudioRecord.getMinBufferSize(SAMPLE_RATE, channelConfig, audioFormat)//in bytes
+
             }
-           val fos =  FileOutputStream(outputFile)
-            // Init encoder/decoder/opusenc
-        codec.encoderInit(SAMPLE_RATE, CHANNELS, APPLICATION)
-        codec.decoderInit(SAMPLE_RATE, CHANNELS)
-        codec.oggEncoderInit(outputFile.absolutePath+"1",SAMPLE_RATE.v,CHANNELS.v,0)
-        // Optional encoder setup
-        codec.encoderSetComplexity(Constants.Complexity.instance(10))
-        codec.encoderSetBitrate(Constants.Bitrate.max())
+            // opusenc
+        codec.oggEncoderInit(outputFile.absolutePath,SAMPLE_RATE,CHANNELS.v,0)
 
         @SuppressLint("MissingPermission")
         recorder = AudioRecord(
             MediaRecorder.AudioSource.VOICE_RECOGNITION,
-            SAMPLE_RATE.v,
+            SAMPLE_RATE,
             channelConfig,
             audioFormat,
             bufferSize
@@ -76,16 +65,10 @@ class AndroidAudioRecorder(
                 if (!isPaused) {
                     val read = recorder?.read(shortBuffer, 0, shortBuffer.size) ?: 0
                     if (read > 0) {
-                      fos.write(codec.convert(shortBuffer),0,read)
                       codec.writeChunk(shortBuffer,CHANNELS.v)
-                        /*val encoded = codec.encode(shortBuffer, FRAME_SIZE_SHORT)
-                        if (encoded != null) {
-                            codec.writeChunk(encoded,CHANNELS.v)
-                        }*/
                     }
                 }
             }
-            fos.close()
 
         }.apply { start() }
 
@@ -110,8 +93,6 @@ class AndroidAudioRecorder(
         recordingThread = null
 
         // Release Opus resources
-        codec.encoderRelease()
-        codec.decoderRelease()
         codec.closeOggEncoder()
 
 
