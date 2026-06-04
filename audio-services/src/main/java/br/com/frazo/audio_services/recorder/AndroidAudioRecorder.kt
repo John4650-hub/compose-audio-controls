@@ -1,8 +1,6 @@
 package br.com.frazo.audio_services.recorder
 import android.annotation.SuppressLint
 import android.media.*
-//import android.media.audiofx.AutomaticGainControl
-//import android.media.audiofx.NoiseSuppressor
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import java.io.File
@@ -31,8 +29,6 @@ class AndroidAudioRecorder(
     private val codec = Opus()
 
     // Noise reduction
-    private var noiseSuppressor: NoiseSuppressor? = null
-    private var automaticGainControl: AutomaticGainControl? = null
 
     override fun startRecording(outputFile: File): Flow<AudioRecordingData> {
         stopRecording()
@@ -70,19 +66,6 @@ class AndroidAudioRecorder(
             audioFormat,
             bufferSize
         )
-
-        // Attach noise suppressor + AGC
-        /*
-        recorder?.audioSessionId?.let { sessionId ->
-            if (NoiseSuppressor.isAvailable()) {
-                noiseSuppressor = NoiseSuppressor.create(sessionId)
-                noiseSuppressor?.enabled = true
-            }
-            if (AutomaticGainControl.isAvailable()) {
-                automaticGainControl = AutomaticGainControl.create(sessionId)
-                automaticGainControl?.enabled = true
-            }
-        }*/
 
         recorder?.startRecording()
 
@@ -131,11 +114,6 @@ class AndroidAudioRecorder(
         codec.decoderRelease()
         codec.closeOggEncoder()
 
-        // Release noise reduction
-        noiseSuppressor?.release()
-        automaticGainControl?.release()
-        noiseSuppressor = null
-        automaticGainControl = null
 
         _audioRecordingData.value = AudioRecordingData.NotStarted
     }
