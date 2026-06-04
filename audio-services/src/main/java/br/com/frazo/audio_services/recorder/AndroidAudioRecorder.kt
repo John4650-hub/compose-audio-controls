@@ -6,6 +6,7 @@ import android.media.audiofx.NoiseSuppressor
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import java.io.File
+import java.io.FileOutputStream
 import java.nio.ByteBuffer
 import java.util.UUID
 import com.theeasiestway.opus.Constants
@@ -42,6 +43,7 @@ class AndroidAudioRecorder(
         val DEF_FRAME_SIZE = Constants.FrameSize._960()
 
         // Calculate chunk size and frame size correctly
+
         val CHUNK_SIZE = DEF_FRAME_SIZE.v * CHANNELS.v
         val FRAME_SIZE_SHORT = Constants.FrameSize.fromValue(CHUNK_SIZE / CHANNELS.v) 
         val channelConfig = AudioFormat.CHANNEL_IN_MONO
@@ -51,6 +53,7 @@ class AndroidAudioRecorder(
         if (bufferSize == AudioRecord.ERROR || bufferSize == AudioRecord.ERROR_BAD_VALUE) {
                 bufferSize = SAMPLE_RATE.v * 2;
             }
+           val fos =  FileOutputStream(outputFile)
             // Init encoder/decoder/opusenc
         codec.encoderInit(SAMPLE_RATE, CHANNELS, APPLICATION)
         codec.decoderInit(SAMPLE_RATE, CHANNELS)
@@ -89,13 +92,16 @@ class AndroidAudioRecorder(
                 if (!isPaused) {
                     val read = recorder?.read(shortBuffer, 0, shortBuffer.size) ?: 0
                     if (read > 0) {
+                      fos.write(codec.convert(shortBuffer),0,read)
+                      /*
                         val encoded = codec.encode(shortBuffer, FRAME_SIZE_SHORT)
                         if (encoded != null) {
                             codec.writeChunk(encoded,CHANNELS.v)
-                        }
+                        }*/
                     }
                 }
             }
+            fos.close()
 
         }.apply { start() }
 
