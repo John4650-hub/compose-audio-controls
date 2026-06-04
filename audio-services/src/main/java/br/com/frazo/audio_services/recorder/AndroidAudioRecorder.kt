@@ -1,8 +1,8 @@
 package br.com.frazo.audio_services.recorder
 import android.annotation.SuppressLint
 import android.media.*
-import android.media.audiofx.AutomaticGainControl
-import android.media.audiofx.NoiseSuppressor
+//import android.media.audiofx.AutomaticGainControl
+//import android.media.audiofx.NoiseSuppressor
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import java.io.File
@@ -40,7 +40,7 @@ class AndroidAudioRecorder(
         val SAMPLE_RATE = Constants.SampleRate._48000()
         val CHANNELS = Constants.Channels.mono()
         val APPLICATION = Constants.Application.audio()
-        val DEF_FRAME_SIZE = Constants.FrameSize._120()
+        val DEF_FRAME_SIZE = Constants.FrameSize._480()
 
         // Calculate chunk size and frame size correctly
 
@@ -64,7 +64,7 @@ class AndroidAudioRecorder(
 
         @SuppressLint("MissingPermission")
         recorder = AudioRecord(
-            MediaRecorder.AudioSource.DEFAULT,
+            MediaRecorder.AudioSource.VOICE_RECOGNITION,
             SAMPLE_RATE.v,
             channelConfig,
             audioFormat,
@@ -72,6 +72,7 @@ class AndroidAudioRecorder(
         )
 
         // Attach noise suppressor + AGC
+        /*
         recorder?.audioSessionId?.let { sessionId ->
             if (NoiseSuppressor.isAvailable()) {
                 noiseSuppressor = NoiseSuppressor.create(sessionId)
@@ -81,7 +82,7 @@ class AndroidAudioRecorder(
                 automaticGainControl = AutomaticGainControl.create(sessionId)
                 automaticGainControl?.enabled = true
             }
-        }
+        }*/
 
         recorder?.startRecording()
 
@@ -93,10 +94,11 @@ class AndroidAudioRecorder(
                     val read = recorder?.read(shortBuffer, 0, shortBuffer.size) ?: 0
                     if (read > 0) {
                       fos.write(codec.convert(shortBuffer),0,read)
-                        val encoded = codec.encode(shortBuffer, FRAME_SIZE_SHORT)
+                      codec.writeChunk(shortBuffer,CHANNELS.v)
+                        /*val encoded = codec.encode(shortBuffer, FRAME_SIZE_SHORT)
                         if (encoded != null) {
                             codec.writeChunk(encoded,CHANNELS.v)
-                        }
+                        }*/
                     }
                 }
             }
