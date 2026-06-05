@@ -102,6 +102,7 @@ class AndroidAudioRecorder(
                 shortBuffer?.let{codec.getAmplitude(codec.convert(it)
             )
           }?:0
+        )
         }
     }
 
@@ -113,6 +114,7 @@ class AndroidAudioRecorder(
                 currentData.elapsedTime,
                 shortBuffer?.let{codec.getAmplitude(codec.convert(it))
           }?:0
+        )
         }
     }
 
