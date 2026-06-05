@@ -51,6 +51,11 @@ android {
     }
 }
 
+configurations.all {
+    resolutionStrategy.cacheChangingModulesFor(0, 'seconds')
+}
+
+
 dependencies {
     implementation 'com.github.John4650-hub:android-opus-codec:develop-SNAPSHOT'
     implementation "androidx.core:core-ktx:$kotlin_version"
