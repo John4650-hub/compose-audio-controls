@@ -99,8 +99,8 @@ class AndroidAudioRecorder(
             isPaused = true
             _audioRecordingData.value = AudioRecordingData.Paused(
                 currentData.elapsedTime,
-                shortBuffer?.let{codec.getAmplitude(codec.convert(it)
-            )!!
+                shortBuffer?.let{codec.getAmplitude(codec.convert(it)!!
+            )
           }?:0
         )
         }
