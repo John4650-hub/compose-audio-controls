@@ -51,6 +51,7 @@ android {
     }
 }
 
+
 configurations.all {
     resolutionStrategy.cacheChangingModulesFor(0, 'seconds')
 }
