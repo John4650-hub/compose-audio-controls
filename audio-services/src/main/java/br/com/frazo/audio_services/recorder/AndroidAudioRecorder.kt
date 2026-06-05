@@ -128,11 +128,11 @@ class AndroidAudioRecorder(
                     emit(
                         AudioRecordingData.Recording(
                             currentData.elapsedTime + UPDATE_DATA_INTERVAL_MILLIS,
-                            shortBuffer?.let{codec.getAmplitude(codec.convert(shortBuffer)
+                            shortBuffer?.let{codec.getAmplitude(codec.convert(it)
                         )
-                    )
                 }?:0
               )
+            )
             }
                 delay(UPDATE_DATA_INTERVAL_MILLIS)
             }
