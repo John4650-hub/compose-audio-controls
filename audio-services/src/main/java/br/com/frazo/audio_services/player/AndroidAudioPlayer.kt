@@ -29,14 +29,13 @@ class AndroidAudioPlayer(
 
     override fun start(file: File): Flow<AudioPlayingData> {
         stop()
-
+        //start opusFile
+        codec.openFile(file.absolutePath)
         val SAMPLE_RATE = Constants.SampleRate._48000()
-        val CHANNELS = Constants.Channels.mono()
         val channelConfig = AudioFormat.CHANNEL_OUT_MONO
         val audioFormat = AudioFormat.ENCODING_PCM_16BIT
         val bufferSize = AudioTrack.getMinBufferSize(SAMPLE_RATE.v, channelConfig, audioFormat)
 
-        codec.decoderInit(SAMPLE_RATE, CHANNELS)
         audioTrack = AudioTrack(
             AudioManager.STREAM_MUSIC,
             SAMPLE_RATE.v,
@@ -50,16 +49,13 @@ class AndroidAudioPlayer(
         audioTrack?.play()
 
         // Background thread: read encoded Opus packets → decode → play PCM
-        val fis = FileInputStream(file)
         flowJob = CoroutineScope(dispatcher).launch {
-            val encodedBuffer = ByteArray(bufferSize)
             while (isActive && audioTrack?.playState == AudioTrack.PLAYSTATE_PLAYING) {
-                val read = fis.read(encodedBuffer)
-                if (read <= 0) break
-
-                val decoded = codec.decode(encodedBuffer, encodedBuffer.size)
+                val decoded = codec.decodeChunk(bufferSize)
                 if (decoded != null) {
                     audioTrack?.write(decoded, 0, decoded.size)
+                }else{
+                  break
                 }
             }
             fis.close()
@@ -95,14 +91,16 @@ class AndroidAudioPlayer(
         audioTrack = null
 
         // Release decoder
-        codec.decoderRelease()
+        codec.closeFile()
 
         _audioPlayingData.value = AudioPlayingData(AudioPlayerStatus.NOT_INITIALIZED, 0, 0)
     }
 
     override fun seek(position: Long) {
-        // Seeking in Opus stream requires indexed packets or custom container.
-        // Not implemented here.
+        // Seeking in Opus stream
+        if(_audioPlayingData.value.status!=AudioPlayerStatus.NOT_INITIALIZED){
+                codec.seekMs(position)
+            }
     }
 
     private fun startFlowing(uniqueId: String): Flow<AudioPlayingData> {
@@ -112,8 +110,8 @@ class AndroidAudioPlayer(
                 if (uniqueId != currentUniqueId) return@flow
 
                 val newData = _audioPlayingData.value.copy(
-                    duration = 0, // Opus stream duration requires container metadata
-                    elapsed = audioTrack?.playbackHeadPosition?.toLong() ?: 0
+                    duration = codec.getDuration(), // Opus stream duration requires container metadata
+                    elapsed = codec.getPosition()
                 )
                 emit(newData)
                 delay(UPDATE_DATA_INTERVAL_MILLIS)

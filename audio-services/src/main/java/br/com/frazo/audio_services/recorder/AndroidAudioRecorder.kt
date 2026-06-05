@@ -17,6 +17,7 @@ class AndroidAudioRecorder(
     private val UPDATE_DATA_INTERVAL_MILLIS = 50L
 
     private var recorder: AudioRecord? = null
+    private var shortBuffer:ShortArray?=null
     private var recordingThread: Thread? = null
     private var audioRecordingDataFlowID: String? = null
     private val _audioRecordingData =
@@ -53,12 +54,12 @@ class AndroidAudioRecorder(
 
         // Background thread: capture PCM → encode → write encoded packets
         recordingThread = Thread {
-            val shortBuffer = ShortArray(bufferSize/2)
+            shortBuffer = ShortArray(bufferSize/2)
             while (recorder?.recordingState == AudioRecord.RECORDSTATE_RECORDING) {
                 if (!isPaused) {
-                    val read = recorder?.read(shortBuffer, 0, shortBuffer.size) ?: 0
+                    val read = recorder?.read(shortBuffer!!, 0, shortBuffer!!.size) ?: 0
                     if (read > 0) {
-                      codec.writeChunk(shortBuffer,CHANNELS.v)
+                      codec.writeChunk(shortBuffer!!,CHANNELS.v)
                     }
                 }
             }
@@ -98,7 +99,7 @@ class AndroidAudioRecorder(
             isPaused = true
             _audioRecordingData.value = AudioRecordingData.Paused(
                 currentData.elapsedTime,
-                0
+                codec.getAmplitude(codec.convert(shortBuffer)
             )
         }
     }
@@ -109,7 +110,7 @@ class AndroidAudioRecorder(
             isPaused = false
             _audioRecordingData.value = AudioRecordingData.Recording(
                 currentData.elapsedTime,
-                0
+                codec.getAmplitude(codec.convert(shortBuffer)
             )
         }
     }
@@ -124,7 +125,7 @@ class AndroidAudioRecorder(
                     emit(
                         AudioRecordingData.Recording(
                             currentData.elapsedTime + UPDATE_DATA_INTERVAL_MILLIS,
-                            0
+                            codec.getAmplitude(codec.convert(shortBuffer)
                         )
                     )
                 }
