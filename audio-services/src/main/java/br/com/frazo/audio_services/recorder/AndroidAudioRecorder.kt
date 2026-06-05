@@ -131,7 +131,7 @@ class AndroidAudioRecorder(
                     )
                 }?:0
               )
-              }
+            }
                 delay(UPDATE_DATA_INTERVAL_MILLIS)
             }
         }
