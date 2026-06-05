@@ -99,8 +99,9 @@ class AndroidAudioRecorder(
             isPaused = true
             _audioRecordingData.value = AudioRecordingData.Paused(
                 currentData.elapsedTime,
-                codec.getAmplitude(codec.convert(shortBuffer)
+                shortBuffer?.let{codec.getAmplitude(codec.convert(it)
             )
+          }?:0
         }
     }
 
@@ -110,8 +111,8 @@ class AndroidAudioRecorder(
             isPaused = false
             _audioRecordingData.value = AudioRecordingData.Recording(
                 currentData.elapsedTime,
-                codec.getAmplitude(codec.convert(shortBuffer)
-            )
+                shortBuffer?.let{codec.getAmplitude(codec.convert(it))
+          }?:0
         }
     }
 
@@ -125,10 +126,12 @@ class AndroidAudioRecorder(
                     emit(
                         AudioRecordingData.Recording(
                             currentData.elapsedTime + UPDATE_DATA_INTERVAL_MILLIS,
-                            codec.getAmplitude(codec.convert(shortBuffer)
+                            shortBuffer?.let{codec.getAmplitude(codec.convert(shortBuffer)
                         )
                     )
-                }
+                }?:0
+              )
+              }
                 delay(UPDATE_DATA_INTERVAL_MILLIS)
             }
         }

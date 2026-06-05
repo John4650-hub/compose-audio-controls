@@ -58,7 +58,6 @@ class AndroidAudioPlayer(
                   break
                 }
             }
-            fis.close()
             stop()
         }
 
