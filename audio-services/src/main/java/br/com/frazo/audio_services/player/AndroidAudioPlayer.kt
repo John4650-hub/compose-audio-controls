@@ -101,6 +101,7 @@ class AndroidAudioPlayer(
         audioTrack?.stop()
         audioTrack?.release()
         audioTrack = null
+        resumeOffset=null
 
         // Release decoder
         codec.closeFile()
