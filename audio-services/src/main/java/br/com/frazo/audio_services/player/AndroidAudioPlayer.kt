@@ -18,6 +18,7 @@ class AndroidAudioPlayer(
     private val UPDATE_DATA_INTERVAL_MILLIS = 200L
 
     private var audioTrack: AudioTrack? = null
+    private var resumeOffset:Long?=null
     private val _audioPlayingData =
         MutableStateFlow(AudioPlayingData(AudioPlayerStatus.NOT_INITIALIZED, 0, 0))
     private val audioPlayingData = _audioPlayingData.asStateFlow()
@@ -26,7 +27,7 @@ class AndroidAudioPlayer(
 
     // Opus codec instance for decoding
     private val codec = Opus()
-    private var bufferSize:Int=0
+    private var bufferSize =0
     override fun start(file: File): Flow<AudioPlayingData> {
         stop()
         //start opusFile
@@ -72,13 +73,14 @@ class AndroidAudioPlayer(
                 break
             }
         }
-        if(_audioPlayingData.value.status!=AudioPlayerStatus.PAUSED){
+        if(resumeOffset==null){
             stop()
           }
     }
 }
 
     override fun pause() {
+      resumeOffset=codec.getPosition()
         audioTrack?.stop()
         _audioPlayingData.value = _audioPlayingData.value.copy(status = AudioPlayerStatus.PAUSED)
     }
@@ -86,6 +88,10 @@ class AndroidAudioPlayer(
    override fun resume() {
     audioTrack?.play()
     launchDecodingLoop()
+    resumeOffset?.let{
+      seek(it)
+      resumeOffset=null
+    }
     _audioPlayingData.value = _audioPlayingData.value.copy(status = AudioPlayerStatus.PLAYING)
 }
  
