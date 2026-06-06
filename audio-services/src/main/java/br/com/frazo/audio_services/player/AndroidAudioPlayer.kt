@@ -26,7 +26,7 @@ class AndroidAudioPlayer(
 
     // Opus codec instance for decoding
     private val codec = Opus()
-
+    private lateinit var bufferSize:Int
     override fun start(file: File): Flow<AudioPlayingData> {
         stop()
         //start opusFile
@@ -34,7 +34,7 @@ class AndroidAudioPlayer(
         val SAMPLE_RATE = Constants.SampleRate._48000()
         val channelConfig = AudioFormat.CHANNEL_OUT_MONO
         val audioFormat = AudioFormat.ENCODING_PCM_16BIT
-        val bufferSize = AudioTrack.getMinBufferSize(SAMPLE_RATE.v, channelConfig, audioFormat)
+        bufferSize = AudioTrack.getMinBufferSize(SAMPLE_RATE.v, channelConfig, audioFormat)
 
         audioTrack = AudioTrack(
             AudioManager.STREAM_MUSIC,
@@ -49,18 +49,7 @@ class AndroidAudioPlayer(
         audioTrack?.play()
 
         // Background thread: read encoded Opus packets → decode → play PCM
-        flowJob = CoroutineScope(dispatcher).launch {
-            while (isActive && audioTrack?.playState == AudioTrack.PLAYSTATE_PLAYING) {
-                val decoded = codec.decodeChunk(bufferSize)
-                if (decoded != null) {
-                    audioTrack?.write(decoded, 0, decoded.size)
-                }else{
-                  break
-                }
-            }
-            stop()
-        }
-
+        launchDecodingLoop()
         _audioPlayingData.value = _audioPlayingData.value.copy(status = AudioPlayerStatus.PLAYING)
 
         // Flow updates for duration/elapsed
@@ -73,15 +62,33 @@ class AndroidAudioPlayer(
         return audioPlayingData
     }
 
+    private fun launchDecodingLoop() {
+    flowJob = CoroutineScope(dispatcher).launch {
+        while (isActive && audioTrack?.playState == AudioTrack.PLAYSTATE_PLAYING) {
+            val decoded = codec.decodeChunk(bufferSize)
+            if (decoded != null) {
+                audioTrack?.write(decoded, 0, decoded.size)
+            } else {
+                break
+            }
+        }
+        if(_audioPlayingData.value.status!=AudioPlayerStatus.PAUSED){
+            stop()
+          }
+    }
+}
+
     override fun pause() {
-        audioTrack?.pause()
+        audioTrack?.stop()
         _audioPlayingData.value = _audioPlayingData.value.copy(status = AudioPlayerStatus.PAUSED)
     }
 
-    override fun resume() {
-        audioTrack?.play()
-        _audioPlayingData.value = _audioPlayingData.value.copy(status = AudioPlayerStatus.PLAYING)
-    }
+   override fun resume() {
+    audioTrack?.play()
+    launchDecodingLoop()
+    _audioPlayingData.value = _audioPlayingData.value.copy(status = AudioPlayerStatus.PLAYING)
+}
+ 
 
     override fun stop() {
         flowJob?.cancel()
