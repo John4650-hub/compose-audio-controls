@@ -26,7 +26,7 @@ class AndroidAudioPlayer(
 
     // Opus codec instance for decoding
     private val codec = Opus()
-    private lateinit var bufferSize:Int
+    private var bufferSize:Int=0
     override fun start(file: File): Flow<AudioPlayingData> {
         stop()
         //start opusFile
