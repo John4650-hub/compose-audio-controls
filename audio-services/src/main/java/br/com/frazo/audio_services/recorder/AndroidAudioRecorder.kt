@@ -32,7 +32,7 @@ class AndroidAudioRecorder(
 
     override fun startRecording(outputFile: File): Flow<AudioRecordingData> {
         stopRecording()
-
+        if(DENOISE){codec.denoiserInit()}
         val SAMPLE_RATE = Constants.SampleRate._48000().v
         val FRAME_SIZE=Constants.FrameSize._480().v
         val CHANNELS = Constants.Channels.mono()
@@ -90,7 +90,8 @@ class AndroidAudioRecorder(
 
         // Release Opus resources
         codec.closeOggEncoder()
-
+        //Release rnnoise
+        if(DENOISE){codec.denoiserDestroy()}
 
         _audioRecordingData.value = AudioRecordingData.NotStarted
     }
