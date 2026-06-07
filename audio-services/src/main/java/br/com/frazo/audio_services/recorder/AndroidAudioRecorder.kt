@@ -7,6 +7,8 @@ import java.io.File
 import java.io.FileOutputStream
 import java.nio.ByteBuffer
 import java.util.UUID
+import java.util.concurrent.LinkedBlockingQueue
+import java.util.concurrent.BlockingQueue
 import com.theeasiestway.opus.Constants
 import com.theeasiestway.opus.Opus
 
@@ -19,6 +21,7 @@ class AndroidAudioRecorder(
     private var recorder: AudioRecord? = null
     private var shortBuffer:ShortArray?=null
     private var recordingThread: Thread? = null
+    private var consumerThread: Thread? = null
     private var audioRecordingDataFlowID: String? = null
     private val _audioRecordingData =
         MutableStateFlow<AudioRecordingData>(AudioRecordingData.NotStarted)
@@ -29,6 +32,8 @@ class AndroidAudioRecorder(
     // Opus codec instance
     private val codec = Opus()
     private val DENOISE=true
+
+    private val frameQueue: BlockingQueue<ShortArray?> = LinkedBlockingQueue()
 
     override fun startRecording(outputFile: File): Flow<AudioRecordingData> {
         stopRecording()
@@ -55,18 +60,54 @@ class AndroidAudioRecorder(
         recorder?.startRecording()
 
         // Background thread: capture PCM → encode → write encoded packets
-        recordingThread = Thread {
-            shortBuffer = ShortArray(bufferSize/2)
-            while (recorder?.recordingState == AudioRecord.RECORDSTATE_RECORDING) {
-                if (!isPaused) {
-                    val read = recorder?.read(shortBuffer!!, 0, shortBuffer!!.size) ?: 0
-                    if (read > 0) {
-                      codec.writeChunk(shortBuffer!!,CHANNELS.v,bufferSize/2,DENOISE)
-                    }
+        val carryBuffer = ShortArray(FRAME_SIZE)
+        var carryIndex = 0
+
+// Producer: capture audio
+recordingThread = Thread {
+    val shortBuffer = ShortArray(bufferSize / 2)
+    while (recorder?.recordingState == AudioRecord.RECORDSTATE_RECORDING) {
+        val read = recorder?.read(shortBuffer, 0, shortBuffer.size) ?: 0
+        if (read > 0) {
+            var offset = 0
+            while (offset < read) {
+                val needed = FRAME_SIZE - carryIndex
+                val toCopy = minOf(needed, read - offset)
+
+                // Copy into carryBuffer
+                System.arraycopy(shortBuffer, offset, carryBuffer, carryIndex, toCopy)
+                carryIndex += toCopy
+                offset += toCopy
+
+                if (carryIndex == FRAME_SIZE) {
+                    // enqueue one full frame
+                    frameQueue.put(carryBuffer.copyOf())
+                    carryIndex = 0
                 }
             }
+        }
+    }
 
-        }.apply { start() }
+    //After loop ends: pad remaining samples with silence , don't discard
+    if (carryIndex > 0) {
+        for (i in carryIndex until FRAME_SIZE) {
+            carryBuffer[i] = 0 // silence padding
+        }
+        frameQueue.put(carryBuffer.copyOf())
+        carryIndex = 0
+    }
+}.apply { start() }
+
+    // Consumer: denoise + encode
+    consumerThread=Thread {
+    while (true) {
+        val frame = frameQueue.take()
+        if (frame==null){
+          break
+        }
+        codec.writeChunk(frame!!, CHANNELS.v, FRAME_SIZE,DENOISE)
+    }
+}.start()
 
         UUID.randomUUID().toString().also { uuid ->
             audioRecordingDataFlowID = uuid
@@ -84,9 +125,12 @@ class AndroidAudioRecorder(
         audioRecordingDataFlowID = null
         recorder?.stop()
         recorder?.release()
+        frameQueue.put(null)
         recorder = null
         recordingThread?.interrupt()
+        consumerThread?.interrupt()
         recordingThread = null
+        consumerThread=null
 
         // Release Opus resources
         codec.closeOggEncoder()
