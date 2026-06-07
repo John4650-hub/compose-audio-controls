@@ -61,7 +61,7 @@ class AndroidAudioRecorder(
                 if (!isPaused) {
                     val read = recorder?.read(shortBuffer!!, 0, shortBuffer!!.size) ?: 0
                     if (read > 0) {
-                      codec.writeChunk(shortBuffer!!,CHANNELS.v,FRAME_SIZE,DENOISE)
+                      codec.writeChunk(shortBuffer!!,CHANNELS.v,bufferSize/2,DENOISE)
                     }
                 }
             }
