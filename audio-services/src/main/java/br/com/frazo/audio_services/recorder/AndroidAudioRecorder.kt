@@ -28,11 +28,13 @@ class AndroidAudioRecorder(
 
     // Opus codec instance
     private val codec = Opus()
+    private val DENOISE=true
 
     override fun startRecording(outputFile: File): Flow<AudioRecordingData> {
         stopRecording()
 
         val SAMPLE_RATE = Constants.SampleRate._48000().v
+        val FRAME_SIZE=Constants.FrameSize._480().v
         val CHANNELS = Constants.Channels.mono()
         val APPLICATION = Constants.Application.audio()
         val channelConfig = AudioFormat.CHANNEL_IN_MONO
@@ -59,7 +61,7 @@ class AndroidAudioRecorder(
                 if (!isPaused) {
                     val read = recorder?.read(shortBuffer!!, 0, shortBuffer!!.size) ?: 0
                     if (read > 0) {
-                      codec.writeChunk(shortBuffer!!,CHANNELS.v)
+                      codec.writeChunk(shortBuffer!!,CHANNELS.v,FRAME_SIZE,DENOISE)
                     }
                 }
             }
