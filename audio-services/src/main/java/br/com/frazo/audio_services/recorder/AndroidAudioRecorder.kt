@@ -107,7 +107,7 @@ recordingThread = Thread {
         }
         codec.writeChunk(frame!!, CHANNELS.v, FRAME_SIZE,DENOISE)
     }
-}.start()
+}.apply { start() }
 
         UUID.randomUUID().toString().also { uuid ->
             audioRecordingDataFlowID = uuid
