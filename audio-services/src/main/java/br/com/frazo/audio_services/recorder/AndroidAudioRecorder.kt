@@ -75,9 +75,15 @@ class AndroidAudioRecorder(
         codec.writeChunk(frame, CHANNELS.v, FRAME_SIZE,DENOISE)
   }
 }.apply { start() }
+
+// Warmup padding: enqueue silence frames before producer starts
+    val warmupFrames = 5 //50ms
+    repeat(warmupFrames) {
+        frameQueue.put(ShortArray(FRAME_SIZE)) // silence
+    }
 // Producer: capture audio
 recordingThread = Thread {
-    val shortBuffer = ShortArray(bufferSize / 2)
+    shortBuffer = ShortArray(bufferSize / 2)
     while (recorder?.recordingState == AudioRecord.RECORDSTATE_RECORDING) {
         val read = recorder?.read(shortBuffer, 0, shortBuffer.size) ?: 0
         if (read > 0) {
