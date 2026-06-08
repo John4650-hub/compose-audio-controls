@@ -85,7 +85,7 @@ class AndroidAudioRecorder(
 recordingThread = Thread {
     shortBuffer = ShortArray(bufferSize / 2)
     while (recorder?.recordingState == AudioRecord.RECORDSTATE_RECORDING) {
-        val read = recorder?.read(shortBuffer, 0, shortBuffer.size) ?: 0
+        val read = recorder?.read(shortBuffer!!, 0, shortBuffer!!.size) ?: 0
         if (read > 0) {
             var offset = 0
             while (offset < read) {
@@ -93,7 +93,7 @@ recordingThread = Thread {
                 val toCopy = minOf(needed, read - offset)
 
                 // Copy into carryBuffer
-                System.arraycopy(shortBuffer, offset, carryBuffer, carryIndex, toCopy)
+                System.arraycopy(shortBuffer!!, offset, carryBuffer, carryIndex, toCopy)
                 carryIndex += toCopy
                 offset += toCopy
 
