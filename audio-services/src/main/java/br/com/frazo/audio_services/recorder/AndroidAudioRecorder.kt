@@ -33,8 +33,9 @@ class AndroidAudioRecorder(
     private val codec = Opus()
     private val DENOISE=true
 
-    private val frameQueue: BlockingQueue<ShortArray?> = LinkedBlockingQueue()
-
+    private val frameQueue: BlockingQueue<ShortArray> = LinkedBlockingQueue()
+    private val POISON_PILL = ShortArray(0)
+    
     override fun startRecording(outputFile: File): Flow<AudioRecordingData> {
         stopRecording()
         if(DENOISE){codec.denoiserInit()}
@@ -102,11 +103,10 @@ recordingThread = Thread {
     consumerThread=Thread {
     while (true) {
         val frame = frameQueue.take()
-        if (frame==null){
+        if (frame.isEmpty()){
           break
         }
-        frame?.let{codec.writeChunk(it, CHANNELS.v, FRAME_SIZE,DENOISE)
-    }
+        codec.writeChunk(frame, CHANNELS.v, FRAME_SIZE,DENOISE)
   }
 }.apply { start() }
 
@@ -126,7 +126,7 @@ recordingThread = Thread {
         audioRecordingDataFlowID = null
         recorder?.stop()
         recorder?.release()
-        frameQueue.put(null)
+        frameQueue.put(POISON_PILL)
         recorder = null
         recordingThread?.interrupt()
         consumerThread?.interrupt()
