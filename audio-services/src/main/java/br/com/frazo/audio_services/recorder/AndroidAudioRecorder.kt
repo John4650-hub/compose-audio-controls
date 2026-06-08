@@ -38,6 +38,7 @@ class AndroidAudioRecorder(
     
     override fun startRecording(outputFile: File): Flow<AudioRecordingData> {
         stopRecording()
+        frameQueue.clear()//reset my queue
         if(DENOISE){codec.denoiserInit()}
         val SAMPLE_RATE = Constants.SampleRate._48000().v
         val FRAME_SIZE=Constants.FrameSize._480().v
@@ -64,6 +65,16 @@ class AndroidAudioRecorder(
         val carryBuffer = ShortArray(FRAME_SIZE)
         var carryIndex = 0
 
+// Consumer: denoise + encode
+    consumerThread=Thread {
+    while (true) {
+        val frame = frameQueue.take()
+        if (frame.isEmpty()){
+          break
+        }
+        codec.writeChunk(frame, CHANNELS.v, FRAME_SIZE,DENOISE)
+  }
+}.apply { start() }
 // Producer: capture audio
 recordingThread = Thread {
     val shortBuffer = ShortArray(bufferSize / 2)
@@ -88,8 +99,7 @@ recordingThread = Thread {
             }
         }
     }
-
-    //After loop ends: pad remaining samples with silence , don't discard
+    //After loop ends: pad remaining samples with silence to makeup FRAME_SIZE, don't discard
     if (carryIndex > 0) {
         for (i in carryIndex until FRAME_SIZE) {
             carryBuffer[i] = 0 // silence padding
@@ -97,17 +107,6 @@ recordingThread = Thread {
         frameQueue.put(carryBuffer.copyOf())
         carryIndex = 0
     }
-}.apply { start() }
-
-    // Consumer: denoise + encode
-    consumerThread=Thread {
-    while (true) {
-        val frame = frameQueue.take()
-        if (frame.isEmpty()){
-          break
-        }
-        codec.writeChunk(frame, CHANNELS.v, FRAME_SIZE,DENOISE)
-  }
 }.apply { start() }
 
         UUID.randomUUID().toString().also { uuid ->
@@ -126,7 +125,9 @@ recordingThread = Thread {
         audioRecordingDataFlowID = null
         recorder?.stop()
         recorder?.release()
-        frameQueue.put(POISON_PILL)
+        if(consumerThread!=null){
+          frameQueue.put(POISON_PILL)
+        }
         recorder = null
         recordingThread?.interrupt()
         consumerThread?.interrupt()
