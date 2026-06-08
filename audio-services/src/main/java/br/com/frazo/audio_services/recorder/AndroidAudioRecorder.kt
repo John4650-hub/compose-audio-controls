@@ -105,8 +105,9 @@ recordingThread = Thread {
         if (frame==null){
           break
         }
-        codec.writeChunk(frame!!, CHANNELS.v, FRAME_SIZE,DENOISE)
+        frame?.let{codec.writeChunk(it, CHANNELS.v, FRAME_SIZE,DENOISE)
     }
+  }
 }.apply { start() }
 
         UUID.randomUUID().toString().also { uuid ->
